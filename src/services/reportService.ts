@@ -1,6 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { Report, ReportLocation } from "@/types/report";
+import { Report, ReportLocation, ReportStatus } from "@/types/report";
 import { Json } from "@/integrations/supabase/types";
 
 export const fetchReports = async (): Promise<Report[]> => {
@@ -43,11 +43,16 @@ export const fetchReports = async (): Promise<Report[]> => {
       description: item.description,
       location: parsedLocation,
       images: item.images,
-      status: item.status,
+      status: item.status as ReportStatus,
       createdAt: item.created_at,
       userId: item.user_id
     };
   });
+};
+
+// Add the missing getAllReports function that's used in MapPage.tsx
+export const getAllReports = async (): Promise<Report[]> => {
+  return fetchReports();
 };
 
 export const submitReport = async (reportData: {

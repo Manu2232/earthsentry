@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { fetchReports } from "@/services/reportService";
 import { Report, ReportStatus } from "@/types/report";
@@ -24,12 +23,14 @@ const ReportsListPage = () => {
   const { data: reports = [], isLoading, error } = useQuery({
     queryKey: ["reports"],
     queryFn: fetchReports,
-    onError: (err: Error) => {
-      toast({
-        title: "Error",
-        description: "Failed to fetch reports: " + err.message,
-        variant: "destructive",
-      });
+    meta: {
+      onError: (err: Error) => {
+        toast({
+          title: "Error",
+          description: "Failed to fetch reports: " + err.message,
+          variant: "destructive",
+        });
+      },
     },
   });
 
