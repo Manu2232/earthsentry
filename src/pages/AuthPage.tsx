@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
-import { Phone, ArrowRight } from "lucide-react";
+import { Phone, ArrowRight, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -17,9 +18,11 @@ const AuthPage = () => {
   const [verificationCode, setVerificationCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSendVerificationCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     if (!phoneNumber || phoneNumber.trim().length < 10) {
       toast({
@@ -39,13 +42,21 @@ const AuthPage = () => {
         phone: formattedPhone,
       });
       
-      if (error) throw error;
-      
-      setVerificationSent(true);
-      toast({
-        title: "Verification Code Sent",
-        description: "Check your phone for the verification code",
-      });
+      if (error) {
+        if (error.message.includes("phone_provider_disabled") || 
+            error.message.includes("Unsupported phone provider")) {
+          setError("Phone authentication is currently disabled in this Supabase project. Please contact the administrator to enable it.");
+          console.error("Supabase phone provider is disabled:", error);
+        } else {
+          throw error;
+        }
+      } else {
+        setVerificationSent(true);
+        toast({
+          title: "Verification Code Sent",
+          description: "Check your phone for the verification code",
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -59,6 +70,7 @@ const AuthPage = () => {
   
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     if (!verificationCode || verificationCode.length !== 6) {
       toast({
@@ -128,6 +140,14 @@ const AuthPage = () => {
         </CardHeader>
         
         <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Authentication Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           {!verificationSent ? (
             <form onSubmit={handleSendVerificationCode} className="space-y-4">
               <div className="space-y-2">
@@ -155,6 +175,15 @@ const AuthPage = () => {
               >
                 {loading ? "Sending..." : "Send Verification Code"}
               </Button>
+              
+              {error && (
+                <div className="text-center text-sm">
+                  <p className="text-orange-600">
+                    Note: If you are the app developer, you need to enable phone authentication
+                    in your Supabase project settings.
+                  </p>
+                </div>
+              )}
             </form>
           ) : (
             <form onSubmit={handleVerifyCode} className="space-y-6">
