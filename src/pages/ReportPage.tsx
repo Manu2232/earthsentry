@@ -1,18 +1,19 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Camera, MapPin, Upload, X, Check } from "lucide-react";
-import { createReport } from "@/services/reportService";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import { CreateReportInput } from "@/types/report";
 
 const ReportPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
@@ -25,6 +26,17 @@ const ReportPage = () => {
       name: "",
     },
   });
+
+  useEffect(() => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to submit reports",
+        variant: "destructive",
+      });
+      navigate("/auth");
+    }
+  }, [user, navigate, toast]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -107,6 +119,16 @@ const ReportPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to submit reports",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
+    
     if (!formData.title || !formData.description) {
       toast({
         title: "Missing information",
@@ -136,13 +158,52 @@ const ReportPage = () => {
 
     try {
       setLoading(true);
-
-      const reportData: CreateReportInput = {
-        ...formData,
-        images,
-      };
-
-      await createReport(reportData);
+      
+      const imageUrls: string[] = [];
+      
+      const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('report-images');
+      
+      if (!bucketData && bucketError) {
+        const { error: createBucketError } = await supabase.storage.createBucket('report-images', {
+          public: true,
+          fileSizeLimit: 5242880,
+        });
+        
+        if (createBucketError) throw createBucketError;
+      }
+      
+      for (const image of images) {
+        const fileName = `${user.id}/${Date.now()}-${image.name}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('report-images')
+          .upload(fileName, image);
+          
+        if (uploadError) throw uploadError;
+        
+        const { data: urlData } = supabase.storage
+          .from('report-images')
+          .getPublicUrl(fileName);
+          
+        imageUrls.push(urlData.publicUrl);
+      }
+      
+      const { error: reportError } = await supabase
+        .from('reports')
+        .insert({
+          user_id: user.id,
+          title: formData.title,
+          description: formData.description,
+          location: {
+            latitude: formData.location.latitude,
+            longitude: formData.location.longitude,
+            name: formData.location.name
+          },
+          images: imageUrls,
+          status: 'pending'
+        });
+      
+      if (reportError) throw reportError;
 
       toast({
         title: "Report submitted successfully",
@@ -150,12 +211,13 @@ const ReportPage = () => {
       });
 
       navigate("/reports");
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error submitting report",
-        description: "Please try again later",
+        description: error.error_description || error.message || "Please try again later",
         variant: "destructive",
       });
+      console.error("Error submitting report:", error);
     } finally {
       setLoading(false);
     }
@@ -181,7 +243,6 @@ const ReportPage = () => {
             </CardHeader>
             
             <CardContent className="space-y-6">
-              {/* Title & Description */}
               <div className="space-y-4">
                 <div>
                   <label htmlFor="title" className="block mb-2 text-sm font-medium text-gray-700">
@@ -213,7 +274,6 @@ const ReportPage = () => {
                 </div>
               </div>
               
-              {/* Location */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700">Location *</label>
@@ -274,7 +334,6 @@ const ReportPage = () => {
                 </div>
               </div>
               
-              {/* Image Upload */}
               <div>
                 <div className="mb-2">
                   <label className="block text-sm font-medium text-gray-700">Photos *</label>
@@ -299,7 +358,6 @@ const ReportPage = () => {
                   </label>
                 </div>
                 
-                {/* Image previews */}
                 {previewImages.length > 0 && (
                   <div className="mt-4">
                     <p className="mb-2 text-sm font-medium text-gray-700">Uploaded Images:</p>
@@ -324,7 +382,6 @@ const ReportPage = () => {
                   </div>
                 )}
               </div>
-              
             </CardContent>
             
             <CardFooter className="flex-col space-y-4 sm:flex-row sm:justify-between sm:space-y-0">

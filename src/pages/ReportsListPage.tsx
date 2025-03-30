@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, MapPin, CalendarIcon, Image, ChevronRight } from "lucide-react";
-import { getAllReports } from "@/services/reportService";
 import { Report, ReportStatus } from "@/types/report";
+import { supabase } from "@/integrations/supabase/client";
 
 const ReportsListPage = () => {
   const [reports, setReports] = useState<Report[]>([]);
@@ -20,9 +20,29 @@ const ReportsListPage = () => {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const data = await getAllReports();
-        setReports(data);
-        setFilteredReports(data);
+        setLoading(true);
+        
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .order('created_at', { ascending: false });
+          
+        if (error) throw error;
+        
+        // Transform the data to match our Report type
+        const formattedReports: Report[] = data.map(report => ({
+          id: report.id,
+          title: report.title,
+          description: report.description,
+          location: report.location,
+          images: report.images || [],
+          status: report.status as ReportStatus,
+          createdAt: report.created_at,
+          updatedAt: report.created_at // Using created_at as updatedAt since we don't have an updated_at field yet
+        }));
+        
+        setReports(formattedReports);
+        setFilteredReports(formattedReports);
       } catch (error) {
         console.error("Error fetching reports:", error);
       } finally {
