@@ -1,28 +1,19 @@
 
-export type ReportStatus = 'pending' | 'investigating' | 'resolved';
+export type ReportStatus = 'pending' | 'investigating' | 'resolved' | 'dismissed';
+
+export type ReportLocation = {
+  latitude: number;
+  longitude: number;
+  name: string;
+};
 
 export interface Report {
   id: string;
   title: string;
   description: string;
-  location: {
-    latitude: number;
-    longitude: number;
-    name: string;
-  };
-  images: string[];
+  location: ReportLocation | null;
+  images: string[] | null;
   status: ReportStatus;
   createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateReportInput {
-  title: string;
-  description: string;
-  location: {
-    latitude: number;
-    longitude: number;
-    name: string;
-  };
-  images: File[];
+  userId?: string | null;
 }

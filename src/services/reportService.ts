@@ -1,115 +1,79 @@
 
-import { Report, CreateReportInput } from '../types/report';
+import { supabase } from "@/integrations/supabase/client";
+import { Report, ReportLocation } from "@/types/report";
+import { Json } from "@/integrations/supabase/types";
 
-// Mock data for reports
-const mockReports: Report[] = [
-  {
-    id: '1',
-    title: 'Illegal Mining Operation in Tarkwa',
-    description: 'Observed heavy machinery and several workers mining in a protected area near the river.',
-    location: {
-      latitude: 5.3047,
-      longitude: -1.9932,
-      name: 'Tarkwa, Western Region'
-    },
-    images: ['/src/assets/mining-image.jpg'],
-    status: 'investigating',
-    createdAt: '2023-07-15T10:30:00Z',
-    updatedAt: '2023-07-15T10:30:00Z'
-  },
-  {
-    id: '2',
-    title: 'River Pollution in Obuasi',
-    description: 'Water has turned muddy brown due to suspected illegal mining activities upstream.',
-    location: {
-      latitude: 6.2025,
-      longitude: -1.6642,
-      name: 'Obuasi, Ashanti Region'
-    },
-    images: ['/src/assets/mining-image.jpg'],
-    status: 'pending',
-    createdAt: '2023-07-22T14:15:00Z',
-    updatedAt: '2023-07-22T14:15:00Z'
-  },
-  {
-    id: '3',
-    title: 'Deforestation for Mining in Kyebi',
-    description: 'Large area of forest being cleared for suspected illegal gold mining.',
-    location: {
-      latitude: 6.1667,
-      longitude: -0.5500,
-      name: 'Kyebi, Eastern Region'
-    },
-    images: ['/src/assets/mining-image.jpg'],
-    status: 'resolved',
-    createdAt: '2023-06-05T09:20:00Z',
-    updatedAt: '2023-07-01T11:45:00Z'
+export const fetchReports = async (): Promise<Report[]> => {
+  const { data, error } = await supabase
+    .from('reports')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error("Error fetching reports:", error);
+    throw new Error(error.message);
   }
-];
 
-// In-memory storage for our reports (would be replaced with a backend API)
-let reports = [...mockReports];
-
-// Get all reports
-export const getAllReports = (): Promise<Report[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(reports);
-    }, 500); // Simulate network delay
+  // Transform the data to match our Report type
+  return (data || []).map(item => {
+    // Parse the location properly
+    let parsedLocation: ReportLocation | null = null;
+    
+    if (item.location) {
+      const loc = item.location as Json;
+      // Check if we can extract the expected properties
+      if (
+        typeof loc === 'object' && 
+        loc !== null && 
+        'latitude' in loc && 
+        'longitude' in loc && 
+        'name' in loc
+      ) {
+        parsedLocation = {
+          latitude: Number(loc.latitude),
+          longitude: Number(loc.longitude),
+          name: String(loc.name),
+        };
+      }
+    }
+    
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      location: parsedLocation,
+      images: item.images,
+      status: item.status,
+      createdAt: item.created_at,
+      userId: item.user_id
+    };
   });
 };
 
-// Get a single report by ID
-export const getReportById = (id: string): Promise<Report | undefined> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const report = reports.find(r => r.id === id);
-      resolve(report);
-    }, 300);
-  });
-};
+export const submitReport = async (reportData: {
+  title: string;
+  description: string;
+  location?: ReportLocation;
+  images?: string[];
+}): Promise<void> => {
+  const { data: userData } = await supabase.auth.getSession();
+  
+  if (!userData.session) {
+    throw new Error("You must be logged in to submit a report");
+  }
+  
+  const { error } = await supabase
+    .from('reports')
+    .insert({
+      title: reportData.title,
+      description: reportData.description,
+      location: reportData.location ? reportData.location : null,
+      images: reportData.images || null,
+      user_id: userData.session.user.id
+    });
 
-// Create a new report
-export const createReport = (reportData: CreateReportInput): Promise<Report> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // In a real app, images would be uploaded to storage and URLs would be returned
-      const imageUrls = reportData.images.map(() => '/src/assets/mining-image.jpg');
-      
-      const newReport: Report = {
-        id: `${Date.now()}`,
-        title: reportData.title,
-        description: reportData.description,
-        location: reportData.location,
-        images: imageUrls,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      reports = [newReport, ...reports];
-      resolve(newReport);
-    }, 800);
-  });
-};
-
-// Update report status
-export const updateReportStatus = (id: string, status: Report['status']): Promise<Report | undefined> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      reports = reports.map(report => {
-        if (report.id === id) {
-          return {
-            ...report,
-            status,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return report;
-      });
-      
-      const updatedReport = reports.find(r => r.id === id);
-      resolve(updatedReport);
-    }, 500);
-  });
+  if (error) {
+    console.error("Error submitting report:", error);
+    throw new Error(error.message);
+  }
 };
